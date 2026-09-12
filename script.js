@@ -73,7 +73,7 @@
   document.fonts?.ready?.then(fitLocalBarText);
 
   const revealTargets = document.querySelectorAll(
-    ".local-bar, .coach, .identity, .facilities, .learn, .for-who, .offerings, .schedule, .private, .membership, .atmosphere, .book, .find-us, .split-visual"
+    ".coach, .identity, .facilities, .learn, .for-who, .offerings, .schedule, .private, .membership, .atmosphere, .book, .find-us, .split-visual"
   );
 
   revealTargets.forEach((el) => el.classList.add("reveal"));
