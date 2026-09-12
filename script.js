@@ -73,7 +73,7 @@
   document.fonts?.ready?.then(fitLocalBarText);
 
   const revealTargets = document.querySelectorAll(
-    ".local-bar, .coach, .identity, .facilities, .learn, .for-who, .offerings, .schedule, .private, .atmosphere, .book, .find-us, .split-visual"
+    ".local-bar, .coach, .identity, .facilities, .learn, .for-who, .offerings, .schedule, .private, .membership, .atmosphere, .book, .find-us, .split-visual"
   );
 
   revealTargets.forEach((el) => el.classList.add("reveal"));
@@ -138,7 +138,10 @@
   const bookError = document.getElementById("book-modal-error");
   const bookWhatsapp = document.getElementById("book-modal-whatsapp");
   const bookPrivateOptions = document.getElementById("book-private-options");
+  const bookGroupOptions = document.getElementById("book-group-options");
+  const bookGoldDuration = document.getElementById("book-gold-duration");
   const bookPackageUpsell = document.getElementById("book-package-upsell");
+  const bookGroupUpsell = document.getElementById("book-group-upsell");
   const bookTotal = document.getElementById("book-total");
   const bookTotalPrice = document.getElementById("book-total-price");
   const bookUpsell10 = document.getElementById("book-upsell-10");
@@ -171,11 +174,28 @@
     "20": "Package of 20 sessions",
   };
 
+  const GROUP_PACK_PRICES = {
+    single: { label: "1 session", price: "300K" },
+    "4": { label: "4 sessions (expires after 1 month)", price: "500K" },
+    "8": { label: "8 sessions (expires after 1 month)", price: "800K" },
+  };
+
+  const GOLD_PRICES = {
+    "1m": { label: "Gold Member — 1 month", price: "1,5M" },
+    "3m": { label: "Gold Member — 3 months", price: "4M" },
+    "6m": { label: "Gold Member — 6 months", price: "7,5M" },
+    "12m": { label: "Gold Member — 1 year", price: "12M" },
+  };
+
+  const KIDS_DAY_PASS = { label: "Day pass", price: "150K" };
+
   const bookingState = {
     day: "",
     time: "",
     type: "",
     isPrivate: false,
+    isGroup: false,
+    isKids: false,
   };
 
   const weekdayIndex = {
@@ -223,8 +243,24 @@
   const getSelectedPackage = () =>
     bookModal?.querySelector('input[name="book-package"]:checked')?.value || "single";
 
+  const getSelectedGroupAccess = () =>
+    bookModal?.querySelector('input[name="book-group-access"]:checked')?.value || "single";
+
+  const getSelectedGoldDuration = () =>
+    bookModal?.querySelector('input[name="book-gold-duration"]:checked')?.value || "1m";
+
   const setPackageSelection = (value) => {
     const input = bookModal?.querySelector(`input[name="book-package"][value="${value}"]`);
+    if (input) input.checked = true;
+  };
+
+  const setGroupAccessSelection = (value) => {
+    const input = bookModal?.querySelector(`input[name="book-group-access"][value="${value}"]`);
+    if (input) input.checked = true;
+  };
+
+  const setGoldDurationSelection = (value) => {
+    const input = bookModal?.querySelector(`input[name="book-gold-duration"][value="${value}"]`);
     if (input) input.checked = true;
   };
 
@@ -233,6 +269,15 @@
     bookWhatsapp.classList.toggle("is-disabled", disabled);
     bookWhatsapp.setAttribute("aria-disabled", String(disabled));
     if (disabled) bookWhatsapp.href = "#";
+  };
+
+  const getGroupSelection = () => {
+    const access = getSelectedGroupAccess();
+    if (access === "gold") {
+      const duration = getSelectedGoldDuration();
+      return GOLD_PRICES[duration];
+    }
+    return GROUP_PACK_PRICES[access];
   };
 
   const refreshPrivateUI = () => {
@@ -248,17 +293,35 @@
     if (bookPackageUpsell) bookPackageUpsell.hidden = pack !== "single";
   };
 
+  const refreshGroupUI = () => {
+    if (!bookingState.isGroup) return;
+    const access = getSelectedGroupAccess();
+    const selection = getGroupSelection();
+    if (!selection || !bookTotalPrice) return;
+
+    bookTotalPrice.textContent = `${selection.price} IDR`;
+    if (bookGoldDuration) bookGoldDuration.hidden = access !== "gold";
+    if (bookGroupUpsell) bookGroupUpsell.hidden = access !== "single";
+  };
+
+  const refreshKidsUI = () => {
+    if (!bookingState.isKids || !bookTotalPrice) return;
+    bookTotalPrice.textContent = `${KIDS_DAY_PASS.price} IDR`;
+  };
+
   const updateBookLink = () => {
     if (!bookDate || !bookWhatsapp) return;
     const selected = bookDate.options[bookDate.selectedIndex];
     if (!bookDate.value || !selected) {
       setBookDisabled(true);
       refreshPrivateUI();
+      refreshGroupUI();
+      refreshKidsUI();
       return;
     }
 
     const display = selected.dataset.display || selected.textContent;
-    const { type, time, isPrivate } = bookingState;
+    const { type, time, isPrivate, isGroup, isKids } = bookingState;
     let msg = `Hi Zealot, I'd like to book ${type} on ${display} at ${time}.`;
 
     if (isPrivate) {
@@ -266,12 +329,19 @@
       const pack = getSelectedPackage();
       const prices = PRIVATE_PRICES[trainer];
       msg = `Hi Zealot, I'd like to book a private session with ${prices.label} — ${PACKAGE_LABELS[pack]} (${prices[pack]} IDR) on ${display} at ${time}.`;
+    } else if (isGroup) {
+      const selection = getGroupSelection();
+      msg = `Hi Zealot, I'd like to book ${type} — ${selection.label} (${selection.price} IDR) on ${display} at ${time}.`;
+    } else if (isKids) {
+      msg = `Hi Zealot, I'd like to book ${type} — ${KIDS_DAY_PASS.label} (${KIDS_DAY_PASS.price} IDR) on ${display} at ${time}.`;
     }
 
     bookWhatsapp.href = `https://wa.me/6281338306716?text=${encodeURIComponent(msg)}`;
     setBookDisabled(false);
     if (bookError) bookError.hidden = true;
     refreshPrivateUI();
+    refreshGroupUI();
+    refreshKidsUI();
   };
 
   const closeBookModal = () => {
@@ -290,14 +360,24 @@
     const time = slot.dataset.time;
     const type = slot.dataset.type;
     const isPrivate = /private/i.test(type || "");
+    const isGroup = /group/i.test(type || "");
+    const isKids = /kids/i.test(type || "");
 
     bookingState.day = day;
     bookingState.time = time;
     bookingState.type = type;
     bookingState.isPrivate = isPrivate;
+    bookingState.isGroup = isGroup;
+    bookingState.isKids = isKids;
 
     if (bookTitle) {
-      bookTitle.textContent = isPrivate ? "Book private session" : "Choose your date";
+      bookTitle.textContent = isPrivate
+        ? "Book private session"
+        : isGroup
+          ? "Book group class"
+          : isKids
+            ? "Book kids class"
+            : "Choose your date";
     }
     bookSummary.textContent = `${type} · ${day} · ${time}`;
     bookDate.innerHTML = '<option value="">Select a date</option>';
@@ -311,14 +391,24 @@
     });
 
     if (bookPrivateOptions) bookPrivateOptions.hidden = !isPrivate;
-    if (bookTotal) bookTotal.hidden = !isPrivate;
+    if (bookGroupOptions) bookGroupOptions.hidden = !isGroup;
+    if (bookTotal) bookTotal.hidden = !(isPrivate || isGroup || isKids);
     if (bookPackageUpsell) bookPackageUpsell.hidden = true;
+    if (bookGroupUpsell) bookGroupUpsell.hidden = true;
+    if (bookGoldDuration) bookGoldDuration.hidden = true;
 
     if (isPrivate) {
       const jerryRadio = bookModal.querySelector('input[name="book-trainer"][value="jerry"]');
       const singleRadio = bookModal.querySelector('input[name="book-package"][value="single"]');
       if (jerryRadio) jerryRadio.checked = true;
       if (singleRadio) singleRadio.checked = true;
+    }
+
+    if (isGroup) {
+      const singleAccess = bookModal.querySelector('input[name="book-group-access"][value="single"]');
+      const goldOneMonth = bookModal.querySelector('input[name="book-gold-duration"][value="1m"]');
+      if (singleAccess) singleAccess.checked = true;
+      if (goldOneMonth) goldOneMonth.checked = true;
     }
 
     if (bookError) bookError.hidden = true;
@@ -338,13 +428,25 @@
       el.addEventListener("click", closeBookModal);
     });
 
-    bookModal.querySelectorAll('input[name="book-trainer"], input[name="book-package"]').forEach((input) => {
-      input.addEventListener("change", updateBookLink);
-    });
+    bookModal
+      .querySelectorAll(
+        'input[name="book-trainer"], input[name="book-package"], input[name="book-group-access"], input[name="book-gold-duration"]'
+      )
+      .forEach((input) => {
+        input.addEventListener("change", updateBookLink);
+      });
 
     bookModal.querySelectorAll("[data-package]").forEach((btn) => {
       btn.addEventListener("click", () => {
         setPackageSelection(btn.dataset.package);
+        updateBookLink();
+      });
+    });
+
+    bookModal.querySelectorAll("[data-group-gold]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        setGroupAccessSelection("gold");
+        setGoldDurationSelection(btn.dataset.groupGold);
         updateBookLink();
       });
     });
