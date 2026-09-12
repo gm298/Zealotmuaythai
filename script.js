@@ -142,6 +142,8 @@
   const bookGoldDuration = document.getElementById("book-gold-duration");
   const bookPackageUpsell = document.getElementById("book-package-upsell");
   const bookGroupUpsell = document.getElementById("book-group-upsell");
+  const bookDayPick = document.getElementById("book-day-pick");
+  const bookTime = document.getElementById("book-modal-time");
   const bookTotal = document.getElementById("book-total");
   const bookTotalPrice = document.getElementById("book-total-price");
   const bookUpsell10 = document.getElementById("book-upsell-10");
@@ -189,6 +191,15 @@
 
   const KIDS_DAY_PASS = { label: "Day pass", price: "150K" };
 
+  const PRIVATE_TIMES = {
+    Monday: ["8:00 AM – 12:00 PM"],
+    Tuesday: ["8:00 AM – 12:00 PM", "3:00 PM – 4:00 PM"],
+    Wednesday: ["8:00 AM – 12:00 PM"],
+    Thursday: ["8:00 AM – 12:00 PM", "3:00 PM – 4:00 PM"],
+    Friday: ["8:00 AM – 12:00 PM"],
+    Saturday: ["8:00 AM – 12:00 PM", "3:00 PM – 4:00 PM"],
+  };
+
   const bookingState = {
     day: "",
     time: "",
@@ -196,6 +207,7 @@
     isPrivate: false,
     isGroup: false,
     isKids: false,
+    pickDayMode: false,
   };
 
   const weekdayIndex = {
@@ -309,14 +321,89 @@
     bookTotalPrice.textContent = `${KIDS_DAY_PASS.price} IDR`;
   };
 
+  const weekdayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+  const fillDateOptions = (day) => {
+    if (!bookDate) return;
+    bookDate.innerHTML = '<option value="">Select a date</option>';
+    if (!day) return;
+    upcomingDatesForWeekday(day).forEach((date) => {
+      const option = document.createElement("option");
+      option.value = formatIsoDate(date);
+      option.textContent = formatDisplayDate(date);
+      option.dataset.display = formatDisplayDate(date);
+      option.dataset.day = day;
+      bookDate.appendChild(option);
+    });
+  };
+
+  const fillPrivateDateOptions = (count = 14) => {
+    if (!bookDate) return;
+    bookDate.innerHTML = '<option value="">Select a date</option>';
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    let added = 0;
+    for (let i = 0; i < 90 && added < count; i += 1) {
+      const check = new Date(start);
+      check.setDate(start.getDate() + i);
+      const dayName = weekdayNames[check.getDay()];
+      if (!PRIVATE_TIMES[dayName]) continue;
+      const option = document.createElement("option");
+      option.value = formatIsoDate(check);
+      option.textContent = formatDisplayDate(check);
+      option.dataset.display = formatDisplayDate(check);
+      option.dataset.day = dayName;
+      bookDate.appendChild(option);
+      added += 1;
+    }
+  };
+
+  const fillPrivateTimes = (day, preferredTime = "") => {
+    if (!bookTime) return;
+    const times = PRIVATE_TIMES[day] || [];
+    bookTime.innerHTML = '<option value="">Select a time</option>';
+    times.forEach((time) => {
+      const option = document.createElement("option");
+      option.value = time;
+      option.textContent = time;
+      bookTime.appendChild(option);
+    });
+    if (preferredTime && times.includes(preferredTime)) {
+      bookTime.value = preferredTime;
+    } else if (times.length === 1) {
+      bookTime.value = times[0];
+    }
+    bookingState.time = bookTime.value || "";
+    if (bookDayPick) bookDayPick.hidden = times.length <= 1;
+  };
+
+  const refreshSummary = () => {
+    if (!bookSummary) return;
+    const { type, day, time } = bookingState;
+    const parts = [type, day, time].filter(Boolean);
+    bookSummary.textContent = parts.join(" · ");
+  };
+
   const updateBookLink = () => {
     if (!bookDate || !bookWhatsapp) return;
+
+    if (bookingState.pickDayMode) {
+      const dayReady = Boolean(bookingState.day && bookingState.time);
+      if (!dayReady) {
+        setBookDisabled(true);
+        refreshPrivateUI();
+        refreshSummary();
+        return;
+      }
+    }
+
     const selected = bookDate.options[bookDate.selectedIndex];
     if (!bookDate.value || !selected) {
       setBookDisabled(true);
       refreshPrivateUI();
       refreshGroupUI();
       refreshKidsUI();
+      refreshSummary();
       return;
     }
 
@@ -342,12 +429,21 @@
     refreshPrivateUI();
     refreshGroupUI();
     refreshKidsUI();
+    refreshSummary();
   };
 
   const closeBookModal = () => {
     if (!bookModal) return;
     bookModal.hidden = true;
     document.body.style.overflow = "";
+  };
+
+  const resetModalChrome = () => {
+    if (bookPackageUpsell) bookPackageUpsell.hidden = true;
+    if (bookGroupUpsell) bookGroupUpsell.hidden = true;
+    if (bookGoldDuration) bookGoldDuration.hidden = true;
+    if (bookError) bookError.hidden = true;
+    setBookDisabled(true);
   };
 
   const openBookModal = (slot) => {
@@ -369,6 +465,7 @@
     bookingState.isPrivate = isPrivate;
     bookingState.isGroup = isGroup;
     bookingState.isKids = isKids;
+    bookingState.pickDayMode = false;
 
     if (bookTitle) {
       bookTitle.textContent = isPrivate
@@ -379,23 +476,14 @@
             ? "Book kids class"
             : "Choose your date";
     }
-    bookSummary.textContent = `${type} · ${day} · ${time}`;
-    bookDate.innerHTML = '<option value="">Select a date</option>';
 
-    upcomingDatesForWeekday(day).forEach((date) => {
-      const option = document.createElement("option");
-      option.value = formatIsoDate(date);
-      option.textContent = formatDisplayDate(date);
-      option.dataset.display = formatDisplayDate(date);
-      bookDate.appendChild(option);
-    });
-
+    if (bookDayPick) bookDayPick.hidden = true;
     if (bookPrivateOptions) bookPrivateOptions.hidden = !isPrivate;
     if (bookGroupOptions) bookGroupOptions.hidden = !isGroup;
     if (bookTotal) bookTotal.hidden = !(isPrivate || isGroup || isKids);
-    if (bookPackageUpsell) bookPackageUpsell.hidden = true;
-    if (bookGroupUpsell) bookGroupUpsell.hidden = true;
-    if (bookGoldDuration) bookGoldDuration.hidden = true;
+    resetModalChrome();
+
+    fillDateOptions(day);
 
     if (isPrivate) {
       const jerryRadio = bookModal.querySelector('input[name="book-trainer"][value="jerry"]');
@@ -411,8 +499,40 @@
       if (goldOneMonth) goldOneMonth.checked = true;
     }
 
-    if (bookError) bookError.hidden = true;
-    setBookDisabled(true);
+    bookModal.hidden = false;
+    document.body.style.overflow = "hidden";
+    bookDate.focus();
+    updateBookLink();
+  };
+
+  const openPrivateBookModal = (trainer = "jerry") => {
+    if (!bookModal || !bookSummary || !bookDate || !bookWhatsapp) return;
+
+    slots.forEach((s) => s.classList.remove("is-selected"));
+
+    bookingState.day = "";
+    bookingState.time = "";
+    bookingState.type = "Private sessions";
+    bookingState.isPrivate = true;
+    bookingState.isGroup = false;
+    bookingState.isKids = false;
+    bookingState.pickDayMode = true;
+
+    if (bookTitle) bookTitle.textContent = "Book private session";
+    if (bookDayPick) bookDayPick.hidden = true;
+    if (bookPrivateOptions) bookPrivateOptions.hidden = false;
+    if (bookGroupOptions) bookGroupOptions.hidden = true;
+    if (bookTotal) bookTotal.hidden = false;
+    resetModalChrome();
+
+    if (bookTime) bookTime.innerHTML = '<option value="">Select a time</option>';
+    fillPrivateDateOptions();
+
+    const trainerRadio = bookModal.querySelector(`input[name="book-trainer"][value="${trainer}"]`);
+    const singleRadio = bookModal.querySelector('input[name="book-package"][value="single"]');
+    if (trainerRadio) trainerRadio.checked = true;
+    if (singleRadio) singleRadio.checked = true;
+
     bookModal.hidden = false;
     document.body.style.overflow = "hidden";
     bookDate.focus();
@@ -421,6 +541,12 @@
 
   slots.forEach((slot) => {
     slot.addEventListener("click", () => openBookModal(slot));
+  });
+
+  document.querySelectorAll("[data-open-private-book]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      openPrivateBookModal(btn.dataset.trainer || "jerry");
+    });
   });
 
   if (bookModal) {
@@ -453,7 +579,28 @@
   }
 
   if (bookDate) {
-    bookDate.addEventListener("change", updateBookLink);
+    bookDate.addEventListener("change", () => {
+      if (bookingState.pickDayMode) {
+        const selected = bookDate.options[bookDate.selectedIndex];
+        const dayName = selected?.dataset.day || "";
+        bookingState.day = dayName;
+        if (dayName) {
+          fillPrivateTimes(dayName);
+        } else {
+          bookingState.time = "";
+          if (bookDayPick) bookDayPick.hidden = true;
+          if (bookTime) bookTime.innerHTML = '<option value="">Select a time</option>';
+        }
+      }
+      updateBookLink();
+    });
+  }
+
+  if (bookTime) {
+    bookTime.addEventListener("change", () => {
+      bookingState.time = bookTime.value;
+      updateBookLink();
+    });
   }
 
   if (bookWhatsapp) {
